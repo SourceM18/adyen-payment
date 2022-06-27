@@ -2,7 +2,7 @@ import React from 'react';
 import { shape, string, bool, func } from 'prop-types';
 import { useIntl } from 'react-intl';
 
-import { usePaymentMethods } from '@magento/peregrine/lib/talons/CheckoutPage/PaymentInformation/usePaymentMethods';
+import { usePaymentMethods } from 'src/overrides/peregrine/talons/CheckoutPage/PaymentInformation/usePaymentMethods';
 
 import { useStyle } from '@magento/venia-ui/lib/classify';
 import RadioGroup from '@magento/venia-ui/lib/components/RadioGroup';
