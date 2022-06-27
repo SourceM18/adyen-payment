@@ -1,2 +1,1 @@
-# adyen-payment
-integration of adyen payment module for magento pwa-studio venia-ui.
+Documentation for Magento PWA Studio packages is located at [https://pwastudio.io](https://pwastudio.io).
