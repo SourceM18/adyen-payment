@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useApolloClient, useMutation } from '@apollo/client';
+import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useApolloClient, useMutation, useQuery} from '@apollo/client';
 import mergeOperations from '@magento/peregrine/lib/util/shallowMerge';
 
 import { useCartContext } from '@magento/peregrine/lib/context/cart';
 
-import DEFAULT_OPERATIONS from '@magento/peregrine/lib/talons/CheckoutPage/PaymentInformation/paymentMethods.gql';
+import DEFAULT_OPERATIONS from 'src/overrides/peregrine/talons/CheckoutPage/PaymentInformation/paymentMethods.gql';
 import { useGoogleReCaptcha } from '@magento/peregrine/lib/hooks/useGoogleReCaptcha';
+import {useFormApi, useFormState} from "informed";
 
 const getRegion = region => {
     return region.region_id || region.label || region.code;
@@ -40,62 +41,44 @@ export const mapAddressData = rawAddressData => {
     }
 };
 
-/**
- * Talon to handle Credit Card payment method.
- *
- * @param {Boolean} props.shouldSubmit boolean value which represents if a payment nonce request has been submitted
- * @param {Function} props.onSuccess callback to invoke when the a payment nonce has been generated
- * @param {Function} props.onReady callback to invoke when the braintree dropin component is ready
- * @param {Function} props.onError callback to invoke when the braintree dropin component throws an error
- * @param {Function} props.resetShouldSubmit callback to reset the shouldSubmit flag
- *
- * @returns {
- *   errors: Map<String, Error>,
- *   shouldRequestPaymentNonce: Boolean,
- *   onPaymentError: Function,
- *   onPaymentSuccess: Function,
- *   onPaymentReady: Function,
- *   isLoading: Boolean,
- *   stepNumber: Number,
- *   initialValues: {
- *      firstName: String,
- *      lastName: String,
- *      city: String,
- *      postcode: String,
- *      phoneNumber: String,
- *      street1: String,
- *      street2: String,
- *      country: String,
- *      state: String,
- *      isBillingAddressSame: Boolean
- *   },
- *   shippingAddressCountry: String,
- *   shouldTeardownDropin: Boolean,
- *   resetShouldTeardownDropin: Function
- * }
- */
 export const useAdyen = props => {
     const {
         onSuccess,
         onReady,
         onError,
-        resetShouldSubmit
+        resetShouldSubmit,
+        shouldSubmit
     } = props;
 
     const operations = mergeOperations(DEFAULT_OPERATIONS, props.operations);
 
     const {
+        getAdyenPaymentNonceQuery,
+        getAdyenPaymentQuery,
         setAdyenInformationMutation,
+        getShippingAddressQuery,
+        setBillingAddressMutation,
+        getBillingAddressQuery,
+        getIsBillingAddressSameQuery,
     } = operations;
-
+    const [{ cartId }] = useCartContext();
     const {
         recaptchaLoading,
         recaptchaWidgetProps
     } = useGoogleReCaptcha({
-        currentForm: 'BRAINTREE',
-        formAction: 'braintree'
+        currentForm: 'ADYEN',
+        formAction: 'adyen_cc'
     });
 
+    const { data: adyenData, loading: adyenLoading } =useQuery(getAdyenPaymentQuery, {
+        skip: !cartId,
+        variables: { cartId }
+    })
+
+    const setAdyenPaymentInformation = useMutation(setAdyenInformationMutation, {
+        skip: !cartId,
+        variables: { cartId }
+    })
     const [isAdyenLoading, setAdyenLoading] = useState(true);
     const [shouldRequestPaymentNonce, setShouldRequestPaymentNonce] = useState(
         false
@@ -106,7 +89,8 @@ export const useAdyen = props => {
     const [stepNumber, setStepNumber] = useState(0);
 
     const client = useApolloClient();
-    const [{ cartId }] = useCartContext();
+    const formState = useFormState();
+    const { validate: validateBillingAddressForm } = useFormApi();
 
     const isLoading =
         isAdyenLoading ||
@@ -115,12 +99,119 @@ export const useAdyen = props => {
 
     const [
         setAdyenInformation, {
-        error: setAdyenInformationMutationError,
-        called: setAdyenInformationMutationCalled,
-        loading: setAdyenInformationMutationLoading
-    }] =useMutation(setAdyenInformationMutation, {
+            error: setAdyenInformationMutationError,
+            called: setAdyenInformationMutationCalled,
+            loading: setAdyenInformationMutationLoading
+        }] =useMutation(setAdyenInformationMutation, {
         variables: { cartId }
     });
+
+    const adyenAvailablePaymentMethods =
+        (adyenData?.adyenPaymentMethods || null)
+
+    const adyenConfig =
+        (adyenData?.storeConfig || null)
+
+    const { data: billingAddressData } = useQuery(getBillingAddressQuery, {
+        skip: !cartId,
+        variables: { cartId }
+    });
+    const { data: shippingAddressData } = useQuery(getShippingAddressQuery, {
+        skip: !cartId,
+        variables: { cartId }
+    });
+    const { data: isBillingAddressSameData } = useQuery(
+        getIsBillingAddressSameQuery,
+        { skip: !cartId, variables: { cartId } }
+    );
+    const [
+        updateBillingAddress,
+        {
+            error: billingAddressMutationError,
+            called: billingAddressMutationCalled,
+            loading: billingAddressMutationLoading
+        }
+    ] = useMutation(setBillingAddressMutation);
+
+    const shippingAddressCountry = shippingAddressData
+        ? shippingAddressData.cart.shippingAddresses[0].country.code
+        : DEFAULT_COUNTRY_CODE;
+    const isBillingAddressSame = true;
+    const initialValues = useMemo(() => {
+        const isBillingAddressSame = isBillingAddressSameData
+            ? isBillingAddressSameData.cart.isBillingAddressSame
+            : true;
+
+        let billingAddress = {};
+        if (billingAddressData && !isBillingAddressSame) {
+            if (billingAddressData.cart.billingAddress) {
+                const {
+                    __typename,
+                    ...rawBillingAddress
+                } = billingAddressData.cart.billingAddress;
+                billingAddress = mapAddressData(rawBillingAddress);
+            }
+        }
+
+        return { isBillingAddressSame, ...billingAddress };
+    }, [isBillingAddressSameData, billingAddressData]);
+
+    const setIsBillingAddressSameInCache = useCallback(() => {
+        client.writeQuery({
+            query: getIsBillingAddressSameQuery,
+            data: {
+                cart: {
+                    __typename: 'Cart',
+                    id: cartId,
+                    isBillingAddressSame
+                }
+            }
+        });
+    }, [client, cartId, getIsBillingAddressSameQuery, isBillingAddressSame]);
+
+    const setShippingAddressAsBillingAddress = useCallback(() => {
+        const shippingAddress = shippingAddressData
+            ? mapAddressData(shippingAddressData.cart.shippingAddresses[0])
+            : {};
+
+        updateBillingAddress({
+            variables: {
+                cartId,
+                ...shippingAddress,
+                sameAsShipping: true
+            }
+        });
+    }, [updateBillingAddress, shippingAddressData, cartId]);
+
+    const setBillingAddress = useCallback(() => {
+        const {
+            firstName,
+            lastName,
+            country,
+            street1,
+            street2,
+            city,
+            region,
+            postcode,
+            phoneNumber
+        } = formState.values;
+
+        updateBillingAddress({
+            variables: {
+                cartId,
+                firstName,
+                lastName,
+                country,
+                street1,
+                street2: street2 || '',
+                city,
+                region: getRegion(region),
+                postcode,
+                phoneNumber,
+                sameAsShipping: false
+            }
+        });
+    }, [formState.values, updateBillingAddress, cartId]);
 
     const updateCCDetailsOnCart = useCallback(
         async (ccType, stateData) => {
@@ -132,6 +223,20 @@ export const useAdyen = props => {
                         stateData
                     },
                 });
+                client.writeQuery({
+                    query: getAdyenPaymentNonceQuery,
+                    data: {
+                        cart: {
+                            __typename: 'Cart',
+                            id: cartId,
+                            paymentNonce: {
+                                type: 'adyen_cc',
+                                cardType: ccType,
+                                holderName: JSON.parse(stateData).paymentMethod.holderName,
+                            },
+                        }
+                    }
+                });
             } catch (error) {
             }
         },
@@ -139,8 +244,8 @@ export const useAdyen = props => {
     );
 
     const onPaymentSuccess = useCallback(
-        () => {
-            updateCCDetailsOnCart();
+        (ccType,stateData) => {
+            updateCCDetailsOnCart(ccType, stateData);
             setStepNumber(3);
         },
         [ updateCCDetailsOnCart]
@@ -169,6 +274,44 @@ export const useAdyen = props => {
     const resetShouldTeardownDropin = useCallback(() => {
         setShouldTeardownDropin(false);
     }, []);
+
+    useEffect(() => {
+        try {
+            if (shouldSubmit) {
+                validateBillingAddressForm();
+
+                const hasErrors = Object.keys(formState.errors).length;
+
+                if (!hasErrors) {
+                    setStepNumber(1);
+                    if (isBillingAddressSame) {
+                        setShippingAddressAsBillingAddress();
+                    } else {
+                        setBillingAddress();
+                    }
+                    setIsBillingAddressSameInCache();
+                } else {
+                    throw new Error('Errors in the billing address form');
+                }
+            }
+        } catch (err) {
+            if (process.env.NODE_ENV !== 'production') {
+                console.error(err);
+            }
+            setStepNumber(0);
+            resetShouldSubmit();
+            setShouldRequestPaymentNonce(false);
+        }
+    }, [
+        shouldSubmit,
+        isBillingAddressSame,
+        setShippingAddressAsBillingAddress,
+        setBillingAddress,
+        setIsBillingAddressSameInCache,
+        resetShouldSubmit,
+        validateBillingAddressForm,
+        formState.errors
+    ]);
 
     useEffect(() => {
         try {
@@ -213,5 +356,8 @@ export const useAdyen = props => {
         shouldTeardownDropin,
         resetShouldTeardownDropin,
         recaptchaWidgetProps,
+        adyenAvailablePaymentMethods,
+        adyenConfig,
+        setAdyenPaymentInformation
     };
 };

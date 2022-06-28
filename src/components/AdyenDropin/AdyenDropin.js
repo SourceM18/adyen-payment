@@ -1,22 +1,21 @@
-import React, { useEffect, useRef } from 'react';
+import React, {useEffect, useRef} from 'react';
 import AdyenCheckout from "@adyen/adyen-web";
 import "@adyen/adyen-web/dist/adyen.css";
-import {usePaymentMethods} from "@magento/peregrine/lib/talons/CheckoutPage/PaymentInformation/usePaymentMethods";
 import {useAdyen} from "./talons/useAdyen";
 
 let checkout = null
 
 export default function AdyenDropin (props) {
-    const talonProps = usePaymentMethods(({}))
-    const {onPaymentSuccess, onPaymentError, resetShouldSubmit, shouldSubmit} = props
-    const talon = useAdyen({
+
+    const { onPaymentSuccess, onPaymentError, resetShouldSubmit, shouldSubmit } = props
+    const talonProps = useAdyen({
         onError: onPaymentError,
         onSuccess: onPaymentSuccess,
         resetShouldSubmit: resetShouldSubmit,
         shouldSubmit: shouldSubmit,
     });
 
-    const { adyenConfig, adyenAvailablePaymentMethods } = talonProps
+    const { adyenConfig, adyenAvailablePaymentMethods, onPaymentSuccess: onSuccess } = talonProps
 
     async function initAdyenCheckout() {
              const configuration = {
@@ -46,7 +45,7 @@ export default function AdyenDropin (props) {
         checkout
             .create("dropin", {
                 onSubmit: (state, dropin) => {
-                    onPaymentSuccess(state.data.paymentMethod.brand, JSON.stringify(state.data))
+                    onSuccess(state.data.paymentMethod.brand, JSON.stringify(state.data))
                     dropin.setStatus("loading");
                 },
             })
@@ -59,10 +58,12 @@ export default function AdyenDropin (props) {
         initAdyenCheckout();
     }, []);
 
-    if(shouldSubmit) {
-        checkout.components[0].submit()
-    }
 
+    useEffect(()=>{
+        if(shouldSubmit) {
+            checkout.components[0].submit()
+        }
+    })
 
     return (
         <>

@@ -12,31 +12,27 @@ import payments from '@magento/venia-ui/lib/components/CheckoutPage/PaymentInfor
 
 const PaymentMethods = props => {
     const {
-        classes: propClasses,
         onPaymentError,
         onPaymentSuccess,
         resetShouldSubmit,
         shouldSubmit
     } = props;
-
     const { formatMessage } = useIntl();
 
-    const classes = useStyle(defaultClasses, propClasses);
+    const classes = useStyle(defaultClasses, props.classes || {});
 
     const talonProps = usePaymentMethods({});
-
     const {
         availablePaymentMethods,
         currentSelectedPaymentMethod,
         initialSelectedMethod,
         isLoading
     } = talonProps;
-
     if (isLoading) {
         return null;
     }
-
     const radios = availablePaymentMethods
+        .filter((paymentMethod)=> ['braintree', 'adyen_cc'].includes(paymentMethod.code))
         .map(({ code, title }) => {
             const id = `paymentMethod--${code}`;
             const isSelected = currentSelectedPaymentMethod === code;

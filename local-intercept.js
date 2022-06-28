@@ -24,6 +24,12 @@ function localIntercept(targets) {
             importPath: 'src/components/AdyenDropin/AdyenDropin'
         })
     );
+    targets.of('@magento/venia-ui').summaryPagePaymentTypes.tap(
+        summaryPagePaymentTypes  => summaryPagePaymentTypes.add({
+            paymentCode: 'adyen_cc',
+            importPath: 'src/components/AdyenDropin/summary.js'
+        })
+    );
 }
 
 module.exports = localIntercept;
