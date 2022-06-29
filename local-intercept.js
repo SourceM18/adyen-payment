@@ -30,6 +30,12 @@ function localIntercept(targets) {
             importPath: 'src/components/AdyenDropin/summary.js'
         })
     );
+    targets.of('@magento/venia-ui').editablePaymentTypes.tap(
+        editablePaymentTypes  => editablePaymentTypes.add({
+            paymentCode: 'adyen_cc',
+            importPath: 'src/components/AdyenDropin/editAdyen.js'
+        })
+    );
 }
 
 module.exports = localIntercept;
